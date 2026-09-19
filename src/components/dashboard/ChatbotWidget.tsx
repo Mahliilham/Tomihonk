@@ -82,6 +82,24 @@ export default function ChatbotWidget() {
     } finally {
       setIsLoading(false);
     }
+  };  // Helper untuk merender teks dengan format (enter, cetak tebal **, dll)
+  const renderFormattedText = (text: string) => {
+    const lines = text.split("\n");
+    return lines.map((line, lineIndex) => {
+      const parts = line.split(/(\*\*.*?\*\*)/g);
+      const formattedLine = parts.map((part, partIndex) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={partIndex} style={{ fontWeight: 600 }}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      });
+
+      return (
+        <span key={lineIndex} style={{ display: "block", minHeight: line === "" ? "8px" : "auto", marginBottom: "2px" }}>
+          {formattedLine}
+        </span>
+      );
+    });
   };
 
   return (
@@ -242,9 +260,11 @@ export default function ChatbotWidget() {
                 boxShadow: msg.sender === "user" ? "0 4px 15px rgba(13, 110, 253, 0.2)" : "0 4px 15px rgba(0,0,0,0.03)",
                 fontSize: "14.5px",
                 lineHeight: "1.5",
-                position: "relative"
+                position: "relative",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word"
               }}>
-                {msg.text}
+                {renderFormattedText(msg.text)}
               </div>
               <span style={{ fontSize: "11px", color: "#94a3b8", marginTop: "6px", padding: "0 6px", fontWeight: 500 }}>
                 {msg.time}

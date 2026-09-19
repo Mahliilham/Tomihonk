@@ -1,10 +1,11 @@
+import os
 import requests
 import json
 from flask import Blueprint, request, jsonify
 
 chatbot_bp = Blueprint("chatbot", __name__)
 
-N8N_WEBHOOK_URL = "https://chatbottomihonk.app.n8n.cloud/webhook/chatbot"
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "https://tomihonkcahtbot.app.n8n.cloud/webhook/chatbot")
 
 
 def extract_reply(result):
@@ -18,16 +19,18 @@ def extract_reply(result):
     if isinstance(result, str):
         return result
 
-    return (
-        result.get("reply") 
-        or result.get("output")   
-        or result.get("text")
-        or result.get("message")
-        or result.get("response")
-        or result.get("answer")
-        or result.get("content")
-        or None
-    )
+    if isinstance(result, dict):
+        return (
+            result.get("reply") 
+            or result.get("output")   
+            or result.get("text")
+            or result.get("message")
+            or result.get("response")
+            or result.get("answer")
+            or result.get("content")
+            or None
+        )
+    return None
 
 
 @chatbot_bp.route("/send", methods=["POST"])
@@ -43,7 +46,7 @@ def send_message():
 
     try:
         # Kirim dengan format yang sesuai workflow n8n:
-        # Edit Fields node membaca: $json.body.chatInput dan $json.body.sessionId
+        # Edit Fields node membaca: $json.body.chatInput / $json.body.message dan $json.body.sessionId
         n8n_response = requests.post(
             N8N_WEBHOOK_URL,
             json={
