@@ -3,22 +3,26 @@ import { useApp } from "@/context/AppContext";
 import { fmtRp, StarsStatic } from "@/lib/format";
 import PaketModal from "@/components/modals/PaketModal";
 import TicketModal from "@/components/modals/TicketModal";
+import ODPModal from "@/components/modals/ODPModal";
 import NotifPanel from "@/components/dashboard/NotifPanel";
-import type { Calon, Paket, Role, SurveyLaporan } from "@/lib/types";
+import type { Calon, Paket, Role, SurveyLaporan, Tagihan, Ticket, TitikODP } from "@/lib/types";
 import * as XLSX from "xlsx";
 import { downloadPdfPemasangan, downloadPdfPemeliharaan, downloadPdfSurvey } from "@/lib/pdfLaporan";
 
-type Tab = "dashboard" | "paket" | "tiket" | "calon" | "keluhan" | "laporan" | "galeri" | "akun";
+type Tab = "dashboard" | "paket" | "tiket" | "calon" | "keluhan" | "laporan" | "galeri" | "akun" | "tagihan" | "akun_user" | "odp";
 
 const TABS: { k: Tab; ic: string; l: string }[] = [
   { k: "dashboard", ic: "fa-tachometer-alt", l: "Dashboard" },
   { k: "paket", ic: "fa-box", l: "Paket" },
-  { k: "tiket", ic: "fa-ticket-alt", l: "Tiket" },
+  { k: "tiket", ic: "fa-ticket-alt", l: "Penugasan" },
   { k: "calon", ic: "fa-user-plus", l: "Calon Pelanggan" },
   { k: "keluhan", ic: "fa-comment-dots", l: "Keluhan" },
   { k: "laporan", ic: "fa-file-alt", l: "Laporan" },
   { k: "galeri", ic: "fa-images", l: "Galeri" },
-  { k: "akun", ic: "fa-users-cog", l: "Akun" },
+  // { k: "tagihan", ic: "fa-wallet", l: "Tagihan" },
+  { k: "akun", ic: "fa-users-cog", l: "Akun Staff" },
+  { k: "akun_user", ic: "fa-users", l: "Akun User / Pelanggan" },
+  { k: "odp", ic: "fa-network-wired", l: "Titik ODP" },
 ];
 
 const stBadge = (s: string) => ({
@@ -40,28 +44,56 @@ const NAMA_BULAN = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-// ── Helper filter berdasarkan bulan & tahun dari string tgl "YYYY-MM-DD" ──
-function filterByBulan<T extends { tgl: string }>(list: T[], bulan: string, tahun: string): T[] {
+// ── Helper filter berdasarkan tanggal, bulan & tahun dari string tgl ──
+function filterByDate<T extends { tgl: string }>(list: T[], bulan: string, tahun: string, tanggal?: string): T[] {
   return list.filter((item) => {
-    const [y, m] = item.tgl.split("-");
+    let y = "", m = "", d = "";
+    if (item.tgl) {
+      const parts = item.tgl.split(/[-/ ]/);
+      if (parts.length >= 3) {
+        if (parts[0].length === 4) {
+          [y, m, d] = parts;
+        } else {
+          [d, m, y] = parts;
+        }
+        d = d.substring(0, 2);
+        y = y.substring(0, 4);
+      }
+    }
     if (tahun && y !== tahun) return false;
     if (bulan && m !== bulan) return false;
+    if (tanggal && d !== tanggal) return false;
     return true;
   });
 }
 
-// ── Komponen UI filter bulan/tahun ──
-function FilterBulan({
-  bulan, tahun, onChange,
-}: { bulan: string; tahun: string; onChange: (b: string, t: string) => void }) {
+// ── Komponen UI filter tanggal/bulan/tahun ──
+function FilterDate({
+  tanggal, bulan, tahun, onChange, showTanggal = false,
+}: { tanggal?: string; bulan: string; tahun: string; onChange: (d: string, b: string, t: string) => void; showTanggal?: boolean }) {
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(thisYear - i));
+  const dates = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <i className="fas fa-filter" style={{ color: "var(--th-muted,#6c757d)", fontSize: ".85rem" }} />
+      {showTanggal && (
+        <select
+          value={tanggal || ""}
+          onChange={(e) => onChange(e.target.value, bulan, tahun)}
+          style={{
+            padding: "5px 10px", borderRadius: 8, border: "1px solid var(--th-border,#dee2e6)",
+            fontSize: ".82rem", background: "var(--th-surface,#fff)", cursor: "pointer",
+            color: "var(--th-text,#212529)", outline: "none",
+          }}
+        >
+          <option value="">Semua Tanggal</option>
+          {dates.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      )}
       <select
         value={bulan}
-        onChange={(e) => onChange(e.target.value, tahun)}
+        onChange={(e) => onChange(tanggal || "", e.target.value, tahun)}
         style={{
           padding: "5px 10px", borderRadius: 8, border: "1px solid var(--th-border,#dee2e6)",
           fontSize: ".82rem", background: "var(--th-surface,#fff)", cursor: "pointer",
@@ -75,7 +107,7 @@ function FilterBulan({
       </select>
       <select
         value={tahun}
-        onChange={(e) => onChange(bulan, e.target.value)}
+        onChange={(e) => onChange(tanggal || "", bulan, e.target.value)}
         style={{
           padding: "5px 10px", borderRadius: 8, border: "1px solid var(--th-border,#dee2e6)",
           fontSize: ".82rem", background: "var(--th-surface,#fff)", cursor: "pointer",
@@ -85,9 +117,9 @@ function FilterBulan({
         <option value="">Semua Tahun</option>
         {years.map((y) => <option key={y} value={y}>{y}</option>)}
       </select>
-      {(bulan || tahun) && (
+      {(tanggal || bulan || tahun) && (
         <button
-          onClick={() => onChange("", String(thisYear))}
+          onClick={() => onChange("", "", String(thisYear))}
           style={{
             padding: "5px 10px", borderRadius: 8, border: "1px solid var(--th-border,#dee2e6)",
             fontSize: ".78rem", background: "transparent", cursor: "pointer",
@@ -108,6 +140,10 @@ export default function AdminDashboard() {
     keluhan, cycleKeluhan, laporan, surveyLaporan, notifications,
     gallery, addGallery, editGallery, deleteGallery,
     accounts, addAccount, editAccount, deleteAccount,
+    tagihanList, addTagihan, updateTagihan, deleteTagihan, tandaiLunas, markTagihanOverdue,
+    konversiCalonToTicket,
+    customerUsers, activateUser, deactivateUser, deleteCustomerUser, refreshCustomerUsers,
+    odpList, saveODP, deleteODP, refreshODP,
   } = useApp();
 
   const [tab, setTabRaw] = useState<Tab>(
@@ -137,16 +173,114 @@ export default function AdminDashboard() {
   const [tiketTahun, setTiketTahun] = useState(thisYear);
   const [calonBulan, setCalonBulan] = useState("");
   const [calonTahun, setCalonTahun] = useState(thisYear);
+  const [lapTanggal, setLapTanggal] = useState("");
+  const [lapBulan, setLapBulan] = useState("");
+  const [lapTahun, setLapTahun] = useState(thisYear);
+
+  // Tagihan state
+  const [tagihanModal, setTagihanModal] = useState<{ open: boolean; editing: Tagihan | null }>({ open: false, editing: null });
+  const [tagihanBulan, setTagihanBulan] = useState("");
+  const [tagihanTahun, setTagihanTahun] = useState(thisYear);
 
   // Gallery upload/edit state
   const fileRef = useRef<HTMLInputElement>(null);
   const [galTitle, setGalTitle] = useState("");
   const [editGalId, setEditGalId] = useState<string | null>(null);
 
+  // ODP Modal & filter state
+  const [odpModal, setOdpModal] = useState<{ open: boolean; editing: TitikODP | null }>({ open: false, editing: null });
+  const [odpFilterWilayah, setOdpFilterWilayah] = useState("semua");
+  const [odpFilterStatus, setOdpFilterStatus] = useState("semua");
+  const [odpSearchQuery, setOdpSearchQuery] = useState("");
+
+  const odpWilayahOptions = useMemo(() => {
+    const setW = new Set<string>();
+    odpList.forEach((o) => { if (o.wilayah) setW.add(o.wilayah); });
+    return Array.from(setW).sort();
+  }, [odpList]);
+
+  const filteredODP = useMemo(() => {
+    return odpList.filter((o) => {
+      const matchWilayah = odpFilterWilayah === "semua" || o.wilayah === odpFilterWilayah;
+      const matchStatus = odpFilterStatus === "semua" || o.status === odpFilterStatus;
+      const q = odpSearchQuery.toLowerCase();
+      const matchQuery =
+        !q ||
+        o.kode.toLowerCase().includes(q) ||
+        o.wilayah.toLowerCase().includes(q) ||
+        o.alamat.toLowerCase().includes(q) ||
+        (o.keterangan && o.keterangan.toLowerCase().includes(q)) ||
+        (o.koordinat && o.koordinat.toLowerCase().includes(q));
+
+      return matchWilayah && matchStatus && matchQuery;
+    });
+  }, [odpList, odpFilterWilayah, odpFilterStatus, odpSearchQuery]);
+
+  const odpStats = useMemo(() => {
+    const total = odpList.length;
+    const totalKap = odpList.reduce((acc, o) => acc + (o.kapasitas || 0), 0);
+    const totalTer = odpList.reduce((acc, o) => acc + (o.terpakai || 0), 0);
+    const totalSisa = Math.max(0, totalKap - totalTer);
+    const penuh = odpList.filter((o) => o.status === "penuh" || o.terpakai >= o.kapasitas).length;
+    const maintenance = odpList.filter((o) => o.status === "maintenance" || o.status === "rusak").length;
+    const tersedia = odpList.filter((o) => o.status === "tersedia" && o.terpakai < o.kapasitas).length;
+    return { total, totalKap, totalTer, totalSisa, penuh, maintenance, tersedia };
+  }, [odpList]);
+
+  const exportODP = () => {
+    const data = filteredODP.map((o) => ({
+      "Kode ODP": o.kode,
+      Wilayah: o.wilayah,
+      Alamat: o.alamat,
+      "Koordinat GPS": o.koordinat || "-",
+      "Kapasitas Port": o.kapasitas,
+      "Port Terpakai": o.terpakai,
+      "Sisa Port": Math.max(0, o.kapasitas - o.terpakai),
+      "% Penggunaan": `${Math.round((o.terpakai / (o.kapasitas || 1)) * 100)}%`,
+      Status: o.status.toUpperCase(),
+      Keterangan: o.keterangan || "-",
+      "Tanggal Input": o.createdAt || "-",
+    }));
+    exportToExcel(data, `titik_odp_tomihonk_${new Date().toISOString().slice(0, 10)}`);
+  };
+
   // Account form state
   const [accForm, setAccForm] = useState({ username: "", password: "", name: "", role: "teknisi" as Role });
   const [editAccId, setEditAccId] = useState<number | string | null>(null);
   const [showAccPass, setShowAccPass] = useState(false);
+
+  const [userFilterStatus, setUserFilterStatus] = useState<"semua" | "aktif" | "tidak_aktif">("semua");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+
+  const filteredCustomerUsers = useMemo(() => {
+    return customerUsers.filter((u) => {
+      const matchStatus =
+        userFilterStatus === "semua"
+          ? true
+          : userFilterStatus === "aktif"
+          ? u.status === "aktif" || Boolean(u.idPelanggan)
+          : u.status !== "aktif" && !u.idPelanggan;
+
+      const q = userSearchQuery.toLowerCase();
+      const matchQuery =
+        !q ||
+        u.username.toLowerCase().includes(q) ||
+        u.name.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.hp && u.hp.toLowerCase().includes(q)) ||
+        (u.alamat && u.alamat.toLowerCase().includes(q)) ||
+        (u.idPelanggan && u.idPelanggan.toLowerCase().includes(q));
+
+      return matchStatus && matchQuery;
+    });
+  }, [customerUsers, userFilterStatus, userSearchQuery]);
+
+  const userStats = useMemo(() => {
+    const total = customerUsers.length;
+    const aktif = customerUsers.filter((u) => u.status === "aktif" || u.idPelanggan).length;
+    const belum = total - aktif;
+    return { total, aktif, belum };
+  }, [customerUsers]);
 
   const unread = notifications.admin.filter((n) => !n.read).length;
   const stats = useMemo(() => ({
@@ -219,16 +353,24 @@ export default function AdminDashboard() {
 
   // ── Data tiket terfilter ──
   const tiketTeknisiFiltered = useMemo(() =>
-    filterByBulan(tickets.filter((t) => t.jenis !== "survey"), tiketBulan, tiketTahun),
+    filterByDate(tickets.filter((t) => t.jenis !== "survey"), tiketBulan, tiketTahun),
     [tickets, tiketBulan, tiketTahun]
   );
   const tiketSalesFiltered = useMemo(() =>
-    filterByBulan(tickets.filter((t) => t.jenis === "survey"), tiketBulan, tiketTahun),
+    filterByDate(tickets.filter((t) => t.jenis === "survey"), tiketBulan, tiketTahun),
     [tickets, tiketBulan, tiketTahun]
   );
   const calonFiltered = useMemo(() =>
-    filterByBulan(calon, calonBulan, calonTahun),
+    filterByDate(calon, calonBulan, calonTahun),
     [calon, calonBulan, calonTahun]
+  );
+  const laporanFiltered = useMemo(() =>
+    filterByDate(laporan, lapBulan, lapTahun, lapTanggal),
+    [laporan, lapTanggal, lapBulan, lapTahun]
+  );
+  const surveyLaporanFiltered = useMemo(() =>
+    filterByDate(surveyLaporan, lapBulan, lapTahun, lapTanggal),
+    [surveyLaporan, lapTanggal, lapBulan, lapTahun]
   );
 
   const exportTiket = () => {
@@ -238,6 +380,8 @@ export default function AdminDashboard() {
     const data = filtered.map((t) => ({
       ID: t.id, Pelanggan: t.pel, HP: t.hp, Alamat: t.alm,
       Jenis: t.jenis, Masalah: t.mas, Prioritas: t.pri,
+      "Estimasi Mulai": t.estimasiMulai || "-",
+      "Estimasi Selesai": t.estimasiSelesai || "-",
       Status: t.st,
       [tiketFilter === "sales" ? "Sales" : "Teknisi"]: t.tek,
       Tanggal: t.tgl,
@@ -254,6 +398,38 @@ export default function AdminDashboard() {
       Sumber: c.sumber || "", Status: c.status,
     }));
     exportToExcel(data, `calon_pelanggan${labelBulan}${labelTahun}`);
+  };
+
+  const exportLaporan = () => {
+    const isSales = lapFilter === "sales";
+    const labelBulan = lapBulan ? `_${NAMA_BULAN[+lapBulan - 1]}` : "";
+    const labelTahun = lapTahun ? `_${lapTahun}` : "";
+    if (isSales) {
+      const data = surveyLaporanFiltered.map((l) => ({
+        Tanggal: l.tgl,
+        "ID Tiket": l.ticketId,
+        "Calon Pelanggan": l.calon,
+        HP: l.hp,
+        Alamat: l.alamat,
+        Sinyal: l.sinyal,
+        Minat: l.minat,
+        Rekomendasi: l.rekomendasi,
+        Sales: l.salesName,
+        Catatan: l.catatan || "",
+      }));
+      exportToExcel(data, `laporan_survey_sales${labelBulan}${labelTahun}`);
+    } else {
+      const data = laporanFiltered.map((l) => ({
+        Tanggal: l.tgl,
+        "ID Tiket": l.ticketId,
+        Pelanggan: l.pel,
+        Jenis: l.jenis,
+        Teknisi: l.tekName,
+        Rating: l.rating,
+        Keterangan: l.keterangan || "",
+      }));
+      exportToExcel(data, `laporan_teknisi${labelBulan}${labelTahun}`);
+    }
   };
 
   return (
@@ -437,7 +613,7 @@ export default function AdminDashboard() {
           {/* ── TIKET ── */}
           {tab === "tiket" && (
             <>
-              <h2>{tiketFilter === "teknisi" ? "Tiket Teknisi" : "Tiket Sales (Survey)"}</h2>
+              <h2>{tiketFilter === "teknisi" ? "Penugasan Teknisi" : "Survey Pelanggan"}</h2>
               <p className="subtitle">
                 {tiketFilter === "teknisi"
                   ? "Kelola tiket pemasangan, pemeliharaan, dan pencabutan"
@@ -451,17 +627,17 @@ export default function AdminDashboard() {
                 padding: "10px 14px", borderRadius: 10,
                 background: "var(--th-surface,#fff)", border: "1px solid var(--th-border,#dee2e6)",
               }}>
-                <FilterBulan
+                <FilterDate
                   bulan={tiketBulan}
                   tahun={tiketTahun}
-                  onChange={(b, t) => { setTiketBulan(b); setTiketTahun(t); }}
+                  onChange={(_, b, t) => { setTiketBulan(b); setTiketTahun(t); }}
                 />
                 <span style={{ fontSize: ".8rem", color: "var(--th-muted,#6c757d)" }}>
                   Menampilkan{" "}
                   <strong>{tiketFilter === "teknisi" ? tiketTeknisiFiltered.length : tiketSalesFiltered.length}</strong>
                   {" "}dari{" "}
                   <strong>{tiketFilter === "teknisi" ? tickets.filter(t => t.jenis !== "survey").length : tickets.filter(t => t.jenis === "survey").length}</strong>
-                  {" "}tiket
+                  {" "}Penugasan
                 </span>
               </div>
 
@@ -470,7 +646,7 @@ export default function AdminDashboard() {
               {tiketFilter === "teknisi" && (
                 <div className="dash-card">
                   <div className="dash-card-head">
-                    <h3>Daftar Tiket Teknisi</h3>
+                    <h3>Daftar Penugasan Teknisi</h3>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className="th-btn th-btn-accent th-btn-sm" onClick={exportTiket}>
                         <i className="fas fa-file-excel" /> Export Excel
@@ -483,15 +659,28 @@ export default function AdminDashboard() {
                   </div>
                   <div className="table-wrap">
                     <table className="th-table">
-                      <thead><tr><th>ID</th><th>Pelanggan</th><th>HP</th><th>Jenis</th><th>Prioritas</th><th>Teknisi</th><th>Status</th><th>Tanggal</th><th>Aksi</th></tr></thead>
+                      <thead><tr><th>ID</th><th>Pelanggan</th><th>HP</th><th>Jenis</th><th>Prioritas</th><th>Teknisi</th><th>Estimasi</th><th>Status</th><th>Tanggal</th><th>Aksi</th></tr></thead>
                       <tbody>
                         {tiketTeknisiFiltered.length === 0 ? (
-                          <tr><td colSpan={9}><div className="empty-state"><i className="fas fa-tools" /><p>Tidak ada tiket teknisi{tiketBulan || tiketTahun ? " pada periode ini" : ""}</p></div></td></tr>
+                          <tr><td colSpan={10}><div className="empty-state"><i className="fas fa-tools" /><p>Tidak ada tiket teknisi{tiketBulan || tiketTahun ? " pada periode ini" : ""}</p></div></td></tr>
                         ) : tiketTeknisiFiltered.map((t) => (
                           <tr key={t.id}><td>{t.id}</td><td>{t.pel}</td><td>{t.hp}</td>
                             <td><span className="th-badge badge-info">{t.jenis}</span></td>
                             <td><span className={`th-badge ${t.pri === "Tinggi" ? "badge-danger" : t.pri === "Sedang" ? "badge-warning" : "badge-info"}`}>{t.pri}</span></td>
                             <td>{t.tek}</td>
+                            <td>
+                              {t.estimasiMulai && t.estimasiSelesai ? (
+                                <span style={{
+                                  display: "inline-flex", alignItems: "center", gap: 4,
+                                  padding: "2px 8px", borderRadius: 12, fontSize: ".8rem", fontWeight: 600,
+                                  background: "rgba(108,99,255,0.1)", color: "#6c63ff",
+                                }}>
+                                  <i className="fas fa-clock" style={{ fontSize: ".72rem" }} /> {t.estimasiMulai} — {t.estimasiSelesai}
+                                </span>
+                              ) : (
+                                <span style={{ color: "var(--th-muted,#adb5bd)", fontSize: ".82rem" }}>-</span>
+                              )}
+                            </td>
                             <td><span className={`th-badge ${stBadge(t.st)}`}>{t.st}</span></td>
                             <td style={{ fontSize: ".82rem", color: "var(--th-muted,#6c757d)" }}>{t.tgl}</td>
                             <td><button className="act-btn del" onClick={() => deleteTicket(t.id)}><i className="fas fa-trash" /></button></td>
@@ -551,10 +740,10 @@ export default function AdminDashboard() {
                 <div className="dash-card-head">
                   <h3>Daftar Calon</h3>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <FilterBulan
+                    <FilterDate
                       bulan={calonBulan}
                       tahun={calonTahun}
-                      onChange={(b, t) => { setCalonBulan(b); setCalonTahun(t); }}
+                      onChange={(_, b, t) => { setCalonBulan(b); setCalonTahun(t); }}
                     />
                     <button className="th-btn th-btn-accent th-btn-sm" onClick={exportCalon}>
                       <i className="fas fa-file-excel" /> Export Excel
@@ -628,7 +817,35 @@ export default function AdminDashboard() {
           {tab === "laporan" && (
             <>
               <h2>Laporan</h2>
-              <p className="subtitle">Laporan teknisi & laporan survey sales</p>
+              <p className="subtitle">Laporan teknisi & laporan sales</p>
+
+              {/* ── Filter Bulan & Tahun ── */}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                flexWrap: "wrap", gap: 12, marginBottom: 12,
+                padding: "10px 14px", borderRadius: 10,
+                background: "var(--th-surface,#fff)", border: "1px solid var(--th-border,#dee2e6)",
+              }}>
+                <FilterDate
+                  showTanggal={true}
+                  tanggal={lapTanggal}
+                  bulan={lapBulan}
+                  tahun={lapTahun}
+                  onChange={(d, b, t) => { setLapTanggal(d); setLapBulan(b); setLapTahun(t); }}
+                />
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <span style={{ fontSize: ".8rem", color: "var(--th-muted,#6c757d)" }}>
+                    Menampilkan{" "}
+                    <strong>{lapFilter === "teknisi" ? laporanFiltered.length : surveyLaporanFiltered.length}</strong>
+                    {" "}dari{" "}
+                    <strong>{lapFilter === "teknisi" ? laporan.length : surveyLaporan.length}</strong>
+                    {" "}Laporan
+                  </span>
+                  <button className="th-btn th-btn-accent th-btn-sm" onClick={exportLaporan}>
+                    <i className="fas fa-file-excel" /> Export Excel
+                  </button>
+                </div>
+              </div>
 
               {/* ── Laporan Teknisi ── */}
               {lapFilter === "teknisi" && (
@@ -637,9 +854,9 @@ export default function AdminDashboard() {
                     <table className="th-table">
                       <thead><tr><th>Tgl</th><th>Tiket</th><th>Pelanggan</th><th>Jenis</th><th>Teknisi</th><th>Rating</th><th>TTD</th><th>Aksi</th></tr></thead>
                       <tbody>
-                        {laporan.length === 0 ? (
-                          <tr><td colSpan={8}><div className="empty-state"><i className="fas fa-file-alt" /><p>Belum ada laporan teknisi</p></div></td></tr>
-                        ) : laporan.map((l) => (
+                        {laporanFiltered.length === 0 ? (
+                          <tr><td colSpan={8}><div className="empty-state"><i className="fas fa-file-alt" /><p>Belum ada laporan teknisi{lapBulan || lapTahun ? " pada periode ini" : ""}</p></div></td></tr>
+                        ) : laporanFiltered.map((l) => (
                           <tr key={l.id}><td>{l.tgl}</td><td>{l.ticketId}</td><td>{l.pel}</td><td>{l.jenis}</td>
                             <td>{l.tekName}</td><td><StarsStatic n={l.rating} /></td>
                             <td>{l.ttd ? <img src={l.ttd} alt="ttd" style={{ height: 32 }} /> : "-"}</td>
@@ -663,9 +880,9 @@ export default function AdminDashboard() {
                     <table className="th-table">
                       <thead><tr><th>Tgl</th><th>Tiket</th><th>Calon Pelanggan</th><th>Sinyal</th><th>Minat</th><th>Rekomendasi</th><th>Sales</th><th>Aksi</th></tr></thead>
                       <tbody>
-                        {surveyLaporan.length === 0 ? (
-                          <tr><td colSpan={8}><div className="empty-state"><i className="fas fa-map-marked-alt" /><p>Belum ada laporan survey</p></div></td></tr>
-                        ) : surveyLaporan.map((l) => (
+                        {surveyLaporanFiltered.length === 0 ? (
+                          <tr><td colSpan={8}><div className="empty-state"><i className="fas fa-map-marked-alt" /><p>Belum ada laporan survey{lapBulan || lapTahun ? " pada periode ini" : ""}</p></div></td></tr>
+                        ) : surveyLaporanFiltered.map((l) => (
                           <tr key={l.id}>
                             <td>{l.tgl}</td>
                             <td>{l.ticketId}</td>
@@ -852,6 +1069,524 @@ export default function AdminDashboard() {
               </div>
             </>
           )}
+
+          {/* ── AKUN USER / PELANGGAN ── */}
+          {tab === "akun_user" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <h2>Manajemen Akun User &amp; Pelanggan</h2>
+                  <p className="subtitle">
+                    Pantau akun pengguna, status pemasangan internet, serta kelola ID Pelanggan
+                  </p>
+                </div>
+                <button
+                  className="th-btn th-btn-outline th-btn-sm"
+                  onClick={refreshCustomerUsers}
+                  style={{ display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <i className="fas fa-sync-alt" /> Refresh Data
+                </button>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="dash-stats" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 20 }}>
+                <div className="dash-stat">
+                  <div className="ic b1"><i className="fas fa-users" /></div>
+                  <div><h3>{userStats.total}</h3><p>Total Akun User</p></div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b3"><i className="fas fa-user-check" /></div>
+                  <div><h3>{userStats.aktif}</h3><p>Aktif / Ber-ID Pelanggan</p></div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b2"><i className="fas fa-user-clock" /></div>
+                  <div><h3>{userStats.belum}</h3><p>Belum Pasang Internet</p></div>
+                </div>
+              </div>
+
+              {/* Filter & Search Bar */}
+              <div className="dash-card" style={{ marginBottom: 20 }}>
+                <div style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: ".85rem", fontWeight: 600, color: "#64748b" }}>Filter Status:</span>
+                    <button
+                      className={`th-btn th-btn-sm ${userFilterStatus === "semua" ? "th-btn-primary" : "th-btn-outline"}`}
+                      onClick={() => setUserFilterStatus("semua")}
+                    >
+                      Semua ({userStats.total})
+                    </button>
+                    <button
+                      className={`th-btn th-btn-sm ${userFilterStatus === "aktif" ? "th-btn-primary" : "th-btn-outline"}`}
+                      onClick={() => setUserFilterStatus("aktif")}
+                      style={{ color: userFilterStatus === "aktif" ? "#fff" : "#16a34a" }}
+                    >
+                      <i className="fas fa-check-circle" style={{ marginRight: 4 }} /> Sudah Pasang ({userStats.aktif})
+                    </button>
+                    <button
+                      className={`th-btn th-btn-sm ${userFilterStatus === "tidak_aktif" ? "th-btn-primary" : "th-btn-outline"}`}
+                      onClick={() => setUserFilterStatus("tidak_aktif")}
+                      style={{ color: userFilterStatus === "tidak_aktif" ? "#fff" : "#d97706" }}
+                    >
+                      <i className="fas fa-clock" style={{ marginRight: 4 }} /> Belum Pasang ({userStats.belum})
+                    </button>
+                  </div>
+
+                  <div style={{ position: "relative", minWidth: 260 }}>
+                    <input
+                      className="form-control"
+                      placeholder="Cari user, nama, HP, ID..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      style={{ paddingLeft: 34, height: 38, fontSize: ".85rem" }}
+                    />
+                    <i
+                      className="fas fa-search"
+                      style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: ".85rem" }}
+                    />
+                    {userSearchQuery && (
+                      <i
+                        className="fas fa-times"
+                        onClick={() => setUserSearchQuery("")}
+                        style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", cursor: "pointer", fontSize: ".85rem" }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Data User */}
+              <div className="dash-card">
+                <div className="dash-card-head">
+                  <h3>
+                    Daftar Akun User ({filteredCustomerUsers.length})
+                  </h3>
+                </div>
+                <div className="table-wrap">
+                  {filteredCustomerUsers.length > 0 ? (
+                    <table className="th-table">
+                      <thead>
+                        <tr>
+                          <th>Username</th>
+                          <th>Nama Lengkap</th>
+                          <th>Kontak</th>
+                          <th>Alamat</th>
+                          <th>ID Pelanggan</th>
+                          <th>Status Pemasangan</th>
+                          <th>Tgl Daftar</th>
+                          <th>Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCustomerUsers.map((u) => {
+                          const hasId = Boolean(u.idPelanggan);
+                          const isUserAktif = u.status === "aktif" || hasId;
+                          return (
+                            <tr key={u.id}>
+                              <td><strong>{u.username}</strong></td>
+                              <td>{u.name}</td>
+                              <td>
+                                <div><i className="fas fa-phone" style={{ width: 14, color: "#64748b" }} /> {u.hp || "-"}</div>
+                                {u.email && <div style={{ fontSize: ".78rem", color: "#64748b" }}><i className="fas fa-envelope" style={{ width: 14 }} /> {u.email}</div>}
+                              </td>
+                              <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={u.alamat}>
+                                {u.alamat || "-"}
+                              </td>
+                              <td>
+                                {hasId ? (
+                                  <span
+                                    className="th-badge badge-success"
+                                    style={{ fontWeight: 700, letterSpacing: "0.5px", fontSize: ".82rem" }}
+                                  >
+                                    <i className="fas fa-id-badge" style={{ marginRight: 4 }} /> {u.idPelanggan}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: "#94a3b8", fontStyle: "italic", fontSize: ".82rem" }}>
+                                    <i className="fas fa-minus-circle" style={{ marginRight: 4 }} /> Belum Ada
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {isUserAktif ? (
+                                  <span className="th-badge badge-success">
+                                    <i className="fas fa-wifi" style={{ marginRight: 4 }} /> Aktif Terpasang
+                                  </span>
+                                ) : (
+                                  <span className="th-badge badge-warning">
+                                    <i className="fas fa-clock" style={{ marginRight: 4 }} /> Belum Pasang
+                                  </span>
+                                )}
+                              </td>
+                              <td>{u.createdAt || "-"}</td>
+                              <td>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                  {!hasId ? (
+                                    <button
+                                      className="act-btn"
+                                      onClick={() => activateUser(u.id)}
+                                      style={{
+                                        background: "linear-gradient(135deg, #10b981, #059669)",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 10px",
+                                        borderRadius: 6,
+                                        fontSize: ".75rem",
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                      }}
+                                      title="Aktifkan pemasangan dan buat ID Pelanggan"
+                                    >
+                                      <i className="fas fa-check" /> Pasang &amp; Beri ID
+                                    </button>
+                                  ) : isUserAktif ? (
+                                    <button
+                                      className="act-btn"
+                                      onClick={() => deactivateUser(u.id)}
+                                      style={{
+                                        background: "#f59e0b",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 10px",
+                                        borderRadius: 6,
+                                        fontSize: ".75rem",
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                      }}
+                                      title="Nonaktifkan layanan user"
+                                    >
+                                      <i className="fas fa-ban" /> Nonaktifkan
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="act-btn"
+                                      onClick={() => activateUser(u.id)}
+                                      style={{
+                                        background: "#10b981",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 10px",
+                                        borderRadius: 6,
+                                        fontSize: ".75rem",
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                      }}
+                                    >
+                                      <i className="fas fa-redo" /> Aktifkan Kembali
+                                    </button>
+                                  )}
+
+                                  <button
+                                    className="act-btn del"
+                                    onClick={() => deleteCustomerUser(u.id)}
+                                    title="Hapus akun user"
+                                  >
+                                    <i className="fas fa-trash" /> Hapus
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
+                      <i className="fas fa-users-slash" style={{ fontSize: "2.2rem", marginBottom: 12, display: "block", color: "#cbd5e1" }} />
+                      <p style={{ margin: 0, fontWeight: 600 }}>Tidak ada data akun user yang sesuai</p>
+                      <small style={{ color: "#94a3b8" }}>User yang mendaftar melalui web akan otomatis muncul di sini</small>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── TITIK ODP ── */}
+          {tab === "odp" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <h2>Manajemen Titik ODP (Optical Distribution Point)</h2>
+                  <p className="subtitle">
+                    Kelola persebaran ODP fiber optic, kapasitas port, serta status utilisasi jaringan
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    className="th-btn th-btn-outline th-btn-sm"
+                    onClick={exportODP}
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    <i className="fas fa-file-excel" style={{ color: "#16a34a" }} /> Export Excel
+                  </button>
+                  <button
+                    className="th-btn th-btn-primary th-btn-sm"
+                    onClick={() => setOdpModal({ open: true, editing: null })}
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    <i className="fas fa-plus" /> Tambah Titik ODP
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="dash-stats" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 20 }}>
+                <div className="dash-stat">
+                  <div className="ic b1"><i className="fas fa-sitemap" /></div>
+                  <div><h3>{odpStats.total}</h3><p>Total Titik ODP</p></div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b4"><i className="fas fa-plug" /></div>
+                  <div><h3>{odpStats.totalKap}</h3><p>Total Port FO</p></div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b2"><i className="fas fa-user-check" /></div>
+                  <div>
+                    <h3>{odpStats.totalTer} <small style={{ fontSize: ".75rem", color: "#64748b" }}>({Math.round((odpStats.totalTer / (odpStats.totalKap || 1)) * 100)}%)</small></h3>
+                    <p>Port Terpakai</p>
+                  </div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b3"><i className="fas fa-check-circle" /></div>
+                  <div><h3>{odpStats.totalSisa}</h3><p>Port Tersedia</p></div>
+                </div>
+                <div className="dash-stat">
+                  <div className="ic b5" style={{ background: odpStats.penuh > 0 ? "rgba(239, 68, 68, 0.15)" : undefined }}>
+                    <i className="fas fa-exclamation-triangle" style={{ color: odpStats.penuh > 0 ? "#ef4444" : undefined }} />
+                  </div>
+                  <div><h3>{odpStats.penuh}</h3><p>ODP Penuh</p></div>
+                </div>
+              </div>
+
+              {/* Filter & Search Bar */}
+              <div className="dash-card" style={{ marginBottom: 20 }}>
+                <div style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <i className="fas fa-filter" style={{ color: "#64748b", fontSize: ".85rem" }} />
+                      <span style={{ fontSize: ".85rem", fontWeight: 600, color: "#64748b" }}>Wilayah:</span>
+                      <select
+                        className="form-control"
+                        value={odpFilterWilayah}
+                        onChange={(e) => setOdpFilterWilayah(e.target.value)}
+                        style={{ padding: "6px 12px", height: 36, fontSize: ".85rem", width: "auto" }}
+                      >
+                        <option value="semua">Semua Wilayah</option>
+                        {odpWilayahOptions.map((w) => (
+                          <option key={w} value={w}>{w}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: ".85rem", fontWeight: 600, color: "#64748b" }}>Status:</span>
+                      <select
+                        className="form-control"
+                        value={odpFilterStatus}
+                        onChange={(e) => setOdpFilterStatus(e.target.value)}
+                        style={{ padding: "6px 12px", height: 36, fontSize: ".85rem", width: "auto" }}
+                      >
+                        <option value="semua">Semua Status</option>
+                        <option value="tersedia">Tersedia</option>
+                        <option value="penuh">Penuh</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="rusak">Rusak</option>
+                      </select>
+                    </div>
+
+                    {(odpFilterWilayah !== "semua" || odpFilterStatus !== "semua" || odpSearchQuery) && (
+                      <button
+                        className="th-btn th-btn-outline th-btn-sm"
+                        onClick={() => {
+                          setOdpFilterWilayah("semua");
+                          setOdpFilterStatus("semua");
+                          setOdpSearchQuery("");
+                        }}
+                        style={{ height: 36, fontSize: ".8rem" }}
+                      >
+                        <i className="fas fa-times" /> Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ position: "relative", minWidth: 260 }}>
+                    <input
+                      className="form-control"
+                      placeholder="Cari kode ODP, wilayah, alamat..."
+                      value={odpSearchQuery}
+                      onChange={(e) => setOdpSearchQuery(e.target.value)}
+                      style={{ paddingLeft: 34, height: 36, fontSize: ".85rem" }}
+                    />
+                    <i
+                      className="fas fa-search"
+                      style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: ".85rem" }}
+                    />
+                    {odpSearchQuery && (
+                      <i
+                        className="fas fa-times"
+                        onClick={() => setOdpSearchQuery("")}
+                        style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", cursor: "pointer", fontSize: ".85rem" }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Data ODP */}
+              <div className="dash-card">
+                <div className="dash-card-head">
+                  <h3>
+                    Daftar Titik ODP ({filteredODP.length})
+                  </h3>
+                </div>
+                <div className="table-wrap">
+                  {filteredODP.length > 0 ? (
+                    <table className="th-table">
+                      <thead>
+                        <tr>
+                          <th>Kode ODP</th>
+                          <th>Wilayah</th>
+                          <th>Alamat &amp; Posisi</th>
+                          <th>GPS Koordinat</th>
+                          <th style={{ minWidth: 160 }}>Kapasitas &amp; Penggunaan Port</th>
+                          <th>Status</th>
+                          <th>Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredODP.map((o) => {
+                          const pct = Math.round((o.terpakai / (o.kapasitas || 1)) * 100);
+                          const sisa = Math.max(0, o.kapasitas - o.terpakai);
+                          const barColor =
+                            pct >= 100 ? "#ef4444" : pct >= 75 ? "#f59e0b" : "#10b981";
+
+                          return (
+                            <tr key={o.id}>
+                              <td>
+                                <span
+                                  className="th-badge"
+                                  style={{
+                                    background: "rgba(59, 130, 246, 0.12)",
+                                    color: "#1d4ed8",
+                                    fontWeight: 700,
+                                    letterSpacing: "0.5px",
+                                    fontSize: ".85rem",
+                                    padding: "4px 8px",
+                                  }}
+                                >
+                                  <i className="fas fa-network-wired" style={{ marginRight: 4 }} /> {o.kode}
+                                </span>
+                              </td>
+                              <td>
+                                <strong>{o.wilayah}</strong>
+                              </td>
+                              <td style={{ maxWidth: 220 }}>
+                                <div style={{ fontWeight: 500 }}>{o.alamat}</div>
+                                {o.keterangan && (
+                                  <small style={{ color: "#64748b", display: "block", marginTop: 2 }}>
+                                    <i className="fas fa-info-circle" style={{ marginRight: 3 }} /> {o.keterangan}
+                                  </small>
+                                )}
+                              </td>
+                              <td>
+                                {o.koordinat ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${encodeURIComponent(o.koordinat)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="th-btn th-btn-outline th-btn-sm"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: ".75rem",
+                                      padding: "3px 8px",
+                                      color: "#2563eb",
+                                      borderColor: "#93c5fd",
+                                    }}
+                                    title={`Buka ${o.koordinat} di Google Maps`}
+                                  >
+                                    <i className="fas fa-map-marker-alt" style={{ color: "#ef4444" }} /> Maps
+                                  </a>
+                                ) : (
+                                  <span style={{ color: "#94a3b8", fontSize: ".8rem" }}>-</span>
+                                )}
+                              </td>
+                              <td>
+                                <div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 3 }}>
+                                    <span><strong>{o.terpakai}</strong> / {o.kapasitas} Port</span>
+                                    <span style={{ color: barColor, fontWeight: 700 }}>{pct}%</span>
+                                  </div>
+                                  <div style={{ width: "100%", height: 7, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
+                                    <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: barColor, borderRadius: 4, transition: "width .3s" }} />
+                                  </div>
+                                  <small style={{ color: sisa === 0 ? "#ef4444" : "#64748b", fontSize: ".74rem" }}>
+                                    {sisa === 0 ? "Port Penuh" : `Sisa: ${sisa} port kosong`}
+                                  </small>
+                                </div>
+                              </td>
+                              <td>
+                                <span
+                                  className={`th-badge ${
+                                    o.status === "tersedia"
+                                      ? "badge-success"
+                                      : o.status === "penuh"
+                                      ? "badge-danger"
+                                      : o.status === "maintenance"
+                                      ? "badge-warning"
+                                      : "badge-danger"
+                                  }`}
+                                >
+                                  {o.status === "tersedia"
+                                    ? "Tersedia"
+                                    : o.status === "penuh"
+                                    ? "Penuh"
+                                    : o.status === "maintenance"
+                                    ? "Maintenance"
+                                    : "Rusak"}
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button
+                                    className="act-btn upd"
+                                    onClick={() => setOdpModal({ open: true, editing: o })}
+                                    title="Edit data Titik ODP"
+                                  >
+                                    <i className="fas fa-edit" /> Edit
+                                  </button>
+                                  <button
+                                    className="act-btn del"
+                                    onClick={() => deleteODP(o.id)}
+                                    title="Hapus Titik ODP"
+                                  >
+                                    <i className="fas fa-trash" /> Hapus
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
+                      <i className="fas fa-network-wired" style={{ fontSize: "2.2rem", marginBottom: 12, display: "block", color: "#cbd5e1" }} />
+                      <p style={{ margin: 0, fontWeight: 600 }}>Tidak ada data Titik ODP yang sesuai filter</p>
+                      <small style={{ color: "#94a3b8" }}>Klik "Tambah Titik ODP" untuk mendaftarkan titik ODP baru</small>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
 
@@ -860,6 +1595,8 @@ export default function AdminDashboard() {
       <TicketModal open={ticketModal.open} fromCalon={ticketModal.from}
         isSalesTicket={ticketModal.isSales}
         onClose={() => setTicketModal((prev) => ({ ...prev, open: false }))} />
+      <ODPModal open={odpModal.open} editing={odpModal.editing}
+        onClose={() => setOdpModal({ open: false, editing: null })} />
 
       {detailLaporan && (
         <div className="lightbox" style={{ zIndex: 9999 }}>

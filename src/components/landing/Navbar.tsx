@@ -54,6 +54,28 @@ export default function Navbar() {
               </a>
             </li>
           ))}
+          <li style={{ display: "flex", alignItems: "center" }}>
+            <a
+              href="/login-pelanggan"
+              className="th-btn th-btn-accent th-btn-sm"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 14px",
+                borderRadius: "20px",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: ".84rem",
+                textDecoration: "none",
+                boxShadow: "0 10px 10px rgba(249,115,22,0.35)",
+                marginLeft: 4,
+              }}
+              onClick={() => setOpen(false)}
+            >
+              <i className="fas fa-user-circle" /> Login
+            </a>
+          </li>
         </ul>
         <button className="menu-toggle" onClick={() => setOpen((v) => !v)}>
           <i className="fas fa-bars" />

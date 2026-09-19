@@ -1,20 +1,18 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
-import type { Role } from "@/lib/types";
 import logo from "../assets/logo.png";
 
-export default function Login() {
+export default function LoginUser() {
   const { login, currentUser } = useApp();
   const navigate = useNavigate();
   const [u, setU] = useState("");
   const [p, setP] = useState("");
-  const [role, setRole] = useState<Role>("admin");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Jika sudah login, redirect ke /
+  // Jika sudah login, redirect ke beranda / dashboard
   useEffect(() => {
     if (currentUser) navigate("/", { replace: true });
   }, [currentUser, navigate]);
@@ -24,16 +22,18 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const ok = await login(u, p, role);
+      const ok = await login(u, p, "user");
       if (ok) {
         navigate("/");
       } else {
-        setError("Username, password, atau role tidak valid.");
+        setError("Username atau password salah.");
       }
     } finally {
       setLoading(false);
     }
   };
+
+  const selectedPaket = sessionStorage.getItem("selected_paket");
 
   return (
     <div className="login-page">
@@ -45,8 +45,8 @@ export default function Login() {
         <div className="login-header">
           <span
             style={{
-              background: "rgba(59,130,246,0.12)",
-              color: "#2563eb",
+              background: "rgba(249,115,22,0.12)",
+              color: "var(--th-accent, #f97316)",
               padding: "4px 12px",
               borderRadius: 20,
               fontSize: ".78rem",
@@ -57,35 +57,58 @@ export default function Login() {
               marginBottom: 8,
             }}
           >
-            <i className="fas fa-shield-alt" /> Portal Staff &amp; Internal
+            <i className="fas fa-users" /> Portal Pelanggan
           </span>
-          <h1>Login Staff / Admin</h1>
-          <p>Masuk untuk mengelola sistem, tiket, dan operasional</p>
+          <h1>Login Pelanggan</h1>
+          <p>Masuk untuk cek tagihan, status layanan, dan tiket internet</p>
+
+          {selectedPaket && (
+            <div
+              style={{
+                marginTop: 12,
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                borderRadius: 8,
+                padding: "8px 12px",
+                fontSize: ".84rem",
+                color: "#9a3412",
+                textAlign: "left",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <i className="fas fa-tag" style={{ color: "#ea580c" }} />
+              <div>
+                Paket yang dipilih: <strong>{selectedPaket}</strong>. Silakan login atau daftar akun untuk melanjutkan pemasangan.
+              </div>
+            </div>
+          )}
         </div>
         <form onSubmit={submit} className="login-form">
           <div className="login-field">
-            <label htmlFor="username">
+            <label htmlFor="user-username">
               <i className="fas fa-user" /> Username
             </label>
             <input
-              id="username"
+              id="user-username"
               className="login-input"
               required
               maxLength={50}
               value={u}
               onChange={(e) => setU(e.target.value)}
-              placeholder="Masukkan username staff"
+              placeholder="Masukkan username Anda"
               autoComplete="username"
             />
           </div>
 
           <div className="login-field">
-            <label htmlFor="password">
+            <label htmlFor="user-password">
               <i className="fas fa-lock" /> Password
             </label>
             <div className="login-input-wrap">
               <input
-                id="password"
+                id="user-password"
                 type={showPassword ? "text" : "password"}
                 className="login-input"
                 required
@@ -106,23 +129,6 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="login-field">
-            <label htmlFor="role">
-              <i className="fas fa-id-badge" /> Role
-            </label>
-            <select
-              id="role"
-              className="login-input"
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              required
-            >
-              <option value="admin">Admin</option>
-              <option value="teknisi">Teknisi</option>
-              <option value="sales">Sales</option>
-            </select>
-          </div>
-
           {error && (
             <div className="login-error">
               <i className="fas fa-exclamation-circle" /> {error}
@@ -133,6 +139,10 @@ export default function Login() {
             type="submit"
             className="login-btn"
             disabled={loading}
+            style={{
+              background: "linear-gradient(135deg, #f97316, #ea580c)",
+              boxShadow: "0 4px 14px rgba(249,115,22,0.35)",
+            }}
           >
             {loading ? (
               <>
@@ -140,7 +150,7 @@ export default function Login() {
               </>
             ) : (
               <>
-                <i className="fas fa-sign-in-alt" /> Masuk Staff
+                <i className="fas fa-sign-in-alt" /> Masuk sebagai Pelanggan
               </>
             )}
           </button>
@@ -148,15 +158,26 @@ export default function Login() {
 
         <button
           className="login-back"
-          onClick={() => navigate("/login-pelanggan")}
+          onClick={() => navigate("/register")}
           style={{ marginTop: 14, color: "var(--th-accent, #f97316)", fontWeight: 700 }}
         >
-          <i className="fas fa-user" /> Anda Pelanggan? Login di sini
+          <i className="fas fa-user-plus" /> Belum punya akun? Daftar di sini
         </button>
+
+        <div style={{ borderTop: "1px solid #f1f5f9", margin: "14px 0 8px" }} />
+
+        {/* <button
+          className="login-back"
+          onClick={() => navigate("/login")}
+          style={{ color: "#64748b", fontSize: ".82rem" }}
+        >
+          <i className="fas fa-user-shield" /> Login sebagai Staff / Admin
+        </button> */}
 
         <button
           className="login-back"
           onClick={() => navigate("/")}
+          style={{ fontSize: ".82rem" }}
         >
           <i className="fas fa-arrow-left" /> Kembali ke Beranda
         </button>

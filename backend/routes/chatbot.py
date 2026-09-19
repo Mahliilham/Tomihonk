@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify
 
 chatbot_bp = Blueprint("chatbot", __name__)
 
-N8N_WEBHOOK_URL = "https://mahlidibalik.app.n8n.cloud/webhook/chatbot-tomihonk"
+N8N_WEBHOOK_URL = "https://chatbottomihonk.app.n8n.cloud/webhook/chatbot"
 
 
 def extract_reply(result):

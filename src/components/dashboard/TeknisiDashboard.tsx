@@ -85,10 +85,10 @@ export default function TeknisiDashboard() {
               <div className="dash-card-head"><h3>Tiket Saya</h3></div>
               <div className="table-wrap">
                 <table className="th-table">
-                  <thead><tr><th>ID</th><th>Pelanggan</th><th>Alamat</th><th>Jenis</th><th>Status</th><th>Aksi</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Pelanggan</th><th>Alamat</th><th>Jenis</th><th>Estimasi</th><th>Status</th><th>Aksi</th></tr></thead>
                   <tbody>
                     {activeTickets.length === 0 ? (
-                      <tr><td colSpan={6}><div className="empty-state"><i className="fas fa-check-circle" /><p>Semua tugas selesai!</p></div></td></tr>
+                      <tr><td colSpan={7}><div className="empty-state"><i className="fas fa-check-circle" /><p>Semua tugas selesai!</p></div></td></tr>
                     ) : activeTickets.map((t) => (
                       <tr key={t.id}><td>{t.id}</td><td>{t.pel}</td><td>{t.alm}</td>
                         <td>
@@ -101,6 +101,19 @@ export default function TeknisiDashboard() {
                             <i className={`fas ${ t.jenis === "survey" ? "fa-search-location" : t.jenis === "pemasangan" ? "fa-tools" : t.jenis === "pemeliharaan" ? "fa-wrench" : "fa-minus-circle" }`} />
                             {t.jenis === "survey" ? "Survey Calon" : t.jenis === "pemasangan" ? "Pemasangan" : t.jenis === "pemeliharaan" ? "Pemeliharaan" : "Dismantle"}
                           </span>
+                        </td>
+                        <td>
+                          {t.estimasiMulai && t.estimasiSelesai ? (
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 4,
+                              padding: "2px 8px", borderRadius: 12, fontSize: ".8rem", fontWeight: 600,
+                              background: "rgba(108,99,255,0.1)", color: "#6c63ff",
+                            }}>
+                              <i className="fas fa-clock" style={{ fontSize: ".72rem" }} /> {t.estimasiMulai} — {t.estimasiSelesai}
+                            </span>
+                          ) : (
+                            <span style={{ color: "#adb5bd", fontSize: ".82rem" }}>-</span>
+                          )}
                         </td>
                         <td><span className={`th-badge ${stBadge(t.st)}`}>{t.st}</span></td>
                         <td>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { Modal, ModalHeader } from "@/components/Modal";
 import { useApp } from "@/context/AppContext";
-import type { Calon } from "@/lib/types";
+import type { Calon, CustomerUser } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -13,7 +14,7 @@ interface Props {
 }
 
 export default function TicketModal({ open, onClose, fromCalon, defaultJenis, defaultSalesId, isSalesTicket }: Props) {
-  const { accounts, calon, createTicket } = useApp();
+  const { accounts, calon, customerUsers, tickets, createTicket, paketList } = useApp();
 
   // Jika isSalesTicket, paksa jenis = "survey"
   const initialJenis = isSalesTicket ? "survey" : (defaultJenis ?? "pemasangan");
@@ -24,6 +25,10 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
     mas: "", pri: "Sedang" as "Rendah" | "Sedang" | "Tinggi", tek: defaultSalesId ?? "",
     // Field khusus survey
     tglSurvey: "",
+    // Estimasi waktu pengerjaan (jam mulai & selesai)
+    estimasiMulai: "",
+    estimasiSelesai: "",
+    paket: "",
   });
 
   // Daftar teknisi dan sales dari accounts
@@ -37,8 +42,23 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
     [accounts]
   );
 
+  // ID teknisi yang sedang punya tiket aktif (pending / proses)
+  const busyTekIds = useMemo(() => {
+    const activeStatuses = ["pending", "proses"];
+    return new Set(
+      tickets
+        .filter((t) => activeStatuses.includes(t.st) && t.tek)
+        .map((t) => t.tek)
+    );
+  }, [tickets]);
+
+  const busyCount = busyTekIds.size;
+
   // Daftar calon pelanggan (semua status, untuk dropdown nama)
   const calonList = useMemo(() => calon, [calon]);
+
+  // Daftar pelanggan terdaftar (dari akun user)
+  const pelangganList = useMemo(() => customerUsers, [customerUsers]);
 
   // Apakah jenis saat ini adalah survey (ditugaskan ke sales)?
   const isSurvey = form.jenis === "survey";
@@ -48,12 +68,21 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
 
   useEffect(() => {
     if (open && fromCalon) {
+      let paketAuto = fromCalon.paket;
+      const matchingPaket = paketList.find(p => fromCalon.paket.toLowerCase().includes(p.nama.toLowerCase()));
+      if (matchingPaket) {
+        paketAuto = `${matchingPaket.nama} - Rp ${matchingPaket.harga.toLocaleString("id-ID")}`;
+      }
+
       setForm({
         pel: fromCalon.nama, hp: fromCalon.hp, alm: fromCalon.alamat,
         jenis: isSalesTicket ? "survey" : (defaultJenis ?? "pemasangan"),
         mas: `Pemasangan baru - ${fromCalon.paket}`, pri: "Sedang",
         tek: defaultSalesId ?? "",
         tglSurvey: "",
+        estimasiMulai: "",
+        estimasiSelesai: "",
+        paket: paketAuto,
       });
       setPelMode("manual"); // saat dari calon, langsung isi manual
     } else if (open && !fromCalon) {
@@ -76,6 +105,9 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
         pri: "Sedang",
         tek: autoSales,
         tglSurvey: "",
+        estimasiMulai: "",
+        estimasiSelesai: "",
+        paket: "",
       });
       setPelMode("dropdown");
     }
@@ -102,20 +134,68 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
     setForm((p) => ({ ...p, jenis, tek: "", mas: p.mas || masDefault[jenis] }));
   };
 
-  // Saat pilih calon dari dropdown → isi HP & Alamat otomatis
-  const handleCalonSelect = (nama: string) => {
-    const found = calonList.find((c) => c.nama === nama);
-    if (found) {
-      setForm((p) => ({ ...p, pel: found.nama, hp: found.hp, alm: found.alamat }));
+  // Saat pilih pelanggan dari dropdown → isi HP, Alamat otomatis
+  // Mendukung dua sumber: calon pelanggan & akun user terdaftar
+  const handlePelangganSelect = (value: string) => {
+    if (!value) {
+      setForm((p) => ({ ...p, pel: "", hp: "", alm: "" }));
+      return;
+    }
+
+    // Cek prefix untuk menentukan sumber data
+    if (value.startsWith("user:")) {
+      const userId = value.slice(5);
+      const found = pelangganList.find((u) => u.id.toString() === userId);
+      if (found) {
+        setForm((p) => ({
+          ...p,
+          pel: found.name,
+          hp: found.hp || "",
+          alm: found.alamat || "",
+        }));
+        setPelMode("manual"); // switch ke manual agar field terlihat & bisa diedit
+      }
+    } else if (value.startsWith("calon:")) {
+      const calonId = value.slice(6);
+      const found = calonList.find((c) => c.id.toString() === calonId);
+      if (found) {
+        let paketAuto = found.paket;
+        const matchingPaket = paketList.find(p => found.paket.toLowerCase().includes(p.nama.toLowerCase()));
+        if (matchingPaket) {
+          paketAuto = `${matchingPaket.nama} - Rp ${matchingPaket.harga.toLocaleString("id-ID")}`;
+        }
+
+        setForm((p) => ({
+          ...p,
+          pel: found.nama,
+          hp: found.hp,
+          alm: found.alamat,
+          paket: paketAuto,
+          mas: p.jenis === "pemasangan" && p.mas === "Pemasangan jaringan internet baru"
+                 ? `Pemasangan baru - ${found.paket}`
+                 : p.mas
+        }));
+        setPelMode("manual"); // switch ke manual agar field terlihat & bisa diedit
+      }
     } else {
-      setForm((p) => ({ ...p, pel: nama, hp: "", alm: "" }));
+      setForm((p) => ({ ...p, pel: value, hp: "", alm: "" }));
     }
   };
 
+  // ── Draft: simpan & pulihkan form jika modal ditutup tidak sengaja ──
+  const draftKey = isSalesTicket ? "draft_ticket_sales" : "draft_ticket";
+  const { clearDraft } = useFormDraft(draftKey, form, setForm, open);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Cegah submit jika teknisi yang dipilih sedang bertugas
+    if (busyTekIds.has(form.tek)) {
+      alert("Teknisi yang dipilih sedang memiliki tugas aktif. Pilih teknisi lain atau tunggu tugasnya selesai.");
+      return;
+    }
     createTicket(form);
-    setForm({ pel: "", hp: "", alm: "", jenis: isSalesTicket ? "survey" : "pemasangan", mas: "", pri: "Sedang", tek: "", tglSurvey: "" });
+    clearDraft();
+    setForm({ pel: "", hp: "", alm: "", jenis: isSalesTicket ? "survey" : "pemasangan", mas: "", pri: "Sedang", tek: "", tglSurvey: "", estimasiMulai: "", estimasiSelesai: "", paket: "" });
     onClose();
   };
 
@@ -151,15 +231,28 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
               <select
                 className="form-control"
                 required
-                value={form.pel}
-                onChange={(e) => handleCalonSelect(e.target.value)}
+                value=""
+                onChange={(e) => handlePelangganSelect(e.target.value)}
               >
-                <option value="">-- Pilih Calon Pelanggan --</option>
-                {calonList.map((c) => (
-                  <option key={c.id} value={c.nama}>
-                    {c.nama} — {c.hp} {c.paket ? `(${c.paket})` : ""}
-                  </option>
-                ))}
+                <option value="">-- Pilih Pelanggan --</option>
+                {pelangganList.length > 0 && (
+                  <optgroup label="📋 Pelanggan Terdaftar (Akun User)">
+                    {pelangganList.map((u) => (
+                      <option key={`user-${u.id}`} value={`user:${u.id}`}>
+                        {u.name}{u.idPelanggan ? ` (${u.idPelanggan})` : ""} — {u.hp || "No HP belum diisi"}{u.alamat ? `, ${u.alamat}` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {calonList.length > 0 && (
+                  <optgroup label="👤 Calon Pelanggan">
+                    {calonList.map((c) => (
+                      <option key={`calon-${c.id}`} value={`calon:${c.id}`}>
+                        {c.nama} — {c.hp} {c.paket ? `(${c.paket})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             ) : (
               <input
@@ -210,6 +303,24 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
             )}
           </div>
 
+          {form.jenis === "pemasangan" && (
+            <div className="form-group">
+              <label>Paket Internet *</label>
+              <select className="form-control" required value={form.paket}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm((p) => ({ ...p, paket: val, mas: p.mas === "Pemasangan jaringan internet baru" || p.mas.startsWith("Pemasangan baru -") ? `Pemasangan baru - ${val}` : p.mas }));
+                }}>
+                <option value="">-- Pilih Paket Internet --</option>
+                {paketList.map((p) => (
+                  <option key={p.id} value={`${p.nama} - Rp ${p.harga.toLocaleString("id-ID")}`}>
+                    {p.nama} - Rp {p.harga.toLocaleString("id-ID")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="form-group">
             <label>Deskripsi *</label>
             <textarea className="form-control" required value={form.mas}
@@ -242,6 +353,33 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
             </select>
           </div>
 
+          {/* ── Estimasi Waktu Pengerjaan (hanya untuk teknisi, bukan survey) ── */}
+          {!isSurvey && (
+            <div style={{
+              background: "rgba(108,99,255,0.05)",
+              border: "1px solid rgba(108,99,255,0.2)",
+              borderRadius: 10, padding: "14px 16px", marginBottom: 16,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "#6c63ff", fontWeight: 600, fontSize: ".9rem" }}>
+                <i className="fas fa-clock" /> Estimasi Waktu Pengerjaan
+                <span style={{ fontSize: ".78rem", color: "var(--th-muted,#6c757d)", fontWeight: 400 }}>(opsional)</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+                <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                  <label>Jam Mulai</label>
+                  <input className="form-control" type="time" value={form.estimasiMulai}
+                    onChange={(e) => setForm((p) => ({ ...p, estimasiMulai: e.target.value }))} />
+                </div>
+                <div style={{ padding: "8px 0", fontSize: "1.1rem", color: "var(--th-muted,#6c757d)" }}>—</div>
+                <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                  <label>Jam Selesai</label>
+                  <input className="form-control" type="time" value={form.estimasiSelesai}
+                    onChange={(e) => setForm((p) => ({ ...p, estimasiSelesai: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Tugaskan ke: Teknisi untuk semua jenis tugas termasuk survey ── */}
           <div className="form-group">
             {false ? (
@@ -257,12 +395,22 @@ export default function TicketModal({ open, onClose, fromCalon, defaultJenis, de
                 <select className="form-control" required value={form.tek}
                   onChange={(e) => setForm((p) => ({ ...p, tek: e.target.value }))}>
                   <option value="">-- Pilih Teknisi --</option>
-                  {teknisiList.map((t) => (
-                    <option key={t.id} value={t.staffId || t.username}>
-                      {t.name}{t.staffId ? ` (${t.staffId})` : ""}
-                    </option>
-                  ))}
+                  {teknisiList.map((t) => {
+                    const tekId = t.staffId || t.username;
+                    const isBusy = busyTekIds.has(tekId);
+                    return (
+                      <option key={t.id} value={tekId} disabled={isBusy}>
+                        {isBusy ? "🔴" : "🟢"} {t.name}{t.staffId ? ` (${t.staffId})` : ""}{isBusy ? " — Sedang Bertugas" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {busyCount > 0 && (
+                  <small style={{ color: "var(--th-muted, #6c757d)", fontSize: ".78rem", marginTop: 4, display: "block" }}>
+                    <i className="fas fa-info-circle" style={{ marginRight: 4, color: "#e67e22" }} />
+                    {busyCount} teknisi sedang bertugas dan tidak dapat dipilih.
+                  </small>
+                )}
               </>
             )}
           </div>

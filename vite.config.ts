@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       "/api": {
-        target: "https://api.tomihonk.co.id",
+        target: "http://localhost:5000",
         changeOrigin: true,
       },
     },

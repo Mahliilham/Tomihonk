@@ -18,6 +18,9 @@ from routes.auth import auth_bp
 from routes.survey_laporan import survey_laporan_bp
 from routes.chatbot import chatbot_bp
 from routes.galeri import galeri_bp
+from routes.verifikasi import verifikasi_bp
+from routes.customer_auth import customer_auth_bp
+from routes.odp import odp_bp
 
 app.register_blueprint(paket_bp, url_prefix="/api/paket")
 app.register_blueprint(tickets_bp, url_prefix="/api/tickets")
@@ -28,6 +31,9 @@ app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(survey_laporan_bp, url_prefix="/api/survey-laporan")
 app.register_blueprint(chatbot_bp, url_prefix="/api/chatbot")
 app.register_blueprint(galeri_bp, url_prefix="/api/galeri")
+app.register_blueprint(verifikasi_bp, url_prefix="/api/verifikasi")
+app.register_blueprint(customer_auth_bp, url_prefix="/api/user")
+app.register_blueprint(odp_bp, url_prefix="/api/odp")
 
 @app.route("/")
 def index():
@@ -52,8 +58,16 @@ def seed_data():
     from models.user import User
     User.seed()
 
+    # Titik ODP
+    from models.odp import ODP
+    ODP.seed()
+
 with app.app_context():
-    seed_data()
+    try:
+        seed_data()
+    except Exception as e:
+        print(f"[WARN] seed_data() gagal (MongoDB mungkin tidak bisa dicapai): {e}")
+        print("[WARN] Backend tetap berjalan — pastikan koneksi internet aktif dan MongoDB Atlas dapat diakses.")
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

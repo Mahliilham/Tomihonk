@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { Modal, ModalHeader } from "@/components/Modal";
 import { useApp } from "@/context/AppContext";
 import type { Paket } from "@/lib/types";
@@ -20,9 +21,13 @@ export default function PaketModal({ open, onClose, editing }: Props) {
     else setForm(empty);
   }, [editing, open]);
 
+  // ── Draft: simpan & pulihkan form jika modal ditutup tidak sengaja (hanya saat buat baru) ──
+  const { clearDraft } = useFormDraft("draft_paket", form, setForm, open && !editing);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     savePaket({ ...form, id: editing?.id });
+    clearDraft();
     onClose();
   };
 

@@ -7,6 +7,9 @@ import { AppProvider } from "@/context/AppContext";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login.tsx";
+import LoginUser from "./pages/LoginUser.tsx";
+import Register from "./pages/Register.tsx";
+import Penilaian from "./pages/Penilaian.tsx";
 
 const queryClient = new QueryClient();
 
@@ -15,15 +18,25 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AppProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AppProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Halaman publik — tidak butuh login / AppProvider */}
+          <Route path="/penilaian" element={<Penilaian />} />
+
+          {/* Halaman yang membutuhkan AppContext */}
+          <Route path="/*" element={
+            <AppProvider>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/login-pelanggan" element={<LoginUser />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AppProvider>
+          } />
+        </Routes>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );

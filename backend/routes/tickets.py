@@ -22,6 +22,18 @@ def create():
         if not data.get(field):
             return jsonify({"error": f"Field '{field}' wajib diisi"}), 400
 
+    # ── Cek apakah teknisi yang dipilih sedang punya tiket aktif ──
+    tek_id = data["tek"]
+    active_ticket = Ticket.collection.find_one({
+        "tek": tek_id,
+        "st": {"$in": ["pending", "proses"]}
+    })
+    if active_ticket:
+        return jsonify({
+            "error": f"Teknisi '{tek_id}' sedang memiliki tugas aktif (tiket {active_ticket.get('id', '-')}). "
+                     f"Selesaikan tiket tersebut terlebih dahulu sebelum menugaskan tugas baru."
+        }), 409
+
     from datetime import date
     data["tgl"] = data.get("tgl") or date.today().isoformat()
 

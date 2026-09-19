@@ -29,7 +29,7 @@ export default function ChatbotWidget() {
     }
   }, [messages, isOpen]);
 
-  const CHATBOT_API_URL = "https://api.tomihonk.co.id/api/chatbot/send";
+  const CHATBOT_API_URL = "/api/chatbot/send";
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;

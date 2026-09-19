@@ -31,6 +31,8 @@ class Ticket:
                 "st": t.get("st", "pending"),
                 "tek": t.get("tek", ""),
                 "tgl": t.get("tgl", ""),
+                "estimasiMulai": t.get("estimasiMulai", ""),
+                "estimasiSelesai": t.get("estimasiSelesai", ""),
             })
         return data
 
@@ -48,6 +50,8 @@ class Ticket:
             "st": "pending",
             "tek": data.get("tek", ""),
             "tgl": data.get("tgl"),
+            "estimasiMulai": data.get("estimasiMulai", ""),
+            "estimasiSelesai": data.get("estimasiSelesai", ""),
         }
         Ticket.collection.insert_one(doc)
         doc.pop("_id", None)

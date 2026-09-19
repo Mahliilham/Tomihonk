@@ -57,7 +57,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="footer-bottom">
-          &copy; www.tomihonk.co.id. All Rights Reserved. Designed by Ilham Faras Baiquni | Universitas Harkat Negeri
+          &copy; www.tomihonk.co.id. All Rights Reserved. Designed by Ilham Farras Baiquni | Universitas Harkat Negeri
         </div>
       </div>
     </footer>

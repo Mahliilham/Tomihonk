@@ -96,6 +96,7 @@ export default function LoginModal({ open, onClose }: Props) {
               onChange={(e) => setRole(e.target.value as Role)}
               required
             >
+              <option value="user">Pelanggan / User</option>
               <option value="admin">Admin</option>
               <option value="teknisi">Teknisi</option>
               <option value="sales">Sales</option>

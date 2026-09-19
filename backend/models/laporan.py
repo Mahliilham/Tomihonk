@@ -21,6 +21,16 @@ class Laporan:
         return data
 
     @staticmethod
+    def get_by_id(id):
+        try:
+            l = Laporan.collection.find_one({"_id": ObjectId(id)})
+            if not l:
+                return None
+            return Laporan._serialize(l)
+        except Exception:
+            return None
+
+    @staticmethod
     def _serialize(l):
         return {
             "id": str(l["_id"]),
@@ -39,6 +49,7 @@ class Laporan:
             "saranKritik": l.get("saranKritik", ""),
             "fotoPemeliharaan": l.get("fotoPemeliharaan", []),
             "filePemeliharaan": l.get("filePemeliharaan", []),
+            "feedbackSubmitted": l.get("feedbackSubmitted", False),
             # ── Field tambahan BERITA ACARA INSTALASI ──
             "hp": l.get("hp", ""),
             "noPelanggan": l.get("noPelanggan", ""),
@@ -72,6 +83,7 @@ class Laporan:
             "saranKritik": data.get("saranKritik", ""),
             "fotoPemeliharaan": data.get("fotoPemeliharaan", []),
             "filePemeliharaan": data.get("filePemeliharaan", []),
+            "feedbackSubmitted": False,
             # ── Field tambahan BERITA ACARA INSTALASI ──
             "hp": data.get("hp", ""),
             "noPelanggan": data.get("noPelanggan", ""),
@@ -92,9 +104,27 @@ class Laporan:
         return doc
 
     @staticmethod
+    def update_feedback(id, rating, saran_kritik, ttd):
+        """Update laporan dengan penilaian dari pelanggan."""
+        try:
+            res = Laporan.collection.update_one(
+                {"_id": ObjectId(id)},
+                {"$set": {
+                    "rating": rating,
+                    "saranKritik": saran_kritik,
+                    "ttd": ttd,
+                    "feedbackSubmitted": True,
+                }}
+            )
+            return res.modified_count > 0
+        except Exception:
+            return False
+
+    @staticmethod
     def delete(id):
         try:
             res = Laporan.collection.delete_one({"_id": ObjectId(id)})
             return res.deleted_count > 0
         except Exception:
             return False
+

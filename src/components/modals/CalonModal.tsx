@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { Modal, ModalHeader } from "@/components/Modal";
 import { useApp } from "@/context/AppContext";
 
@@ -7,21 +8,6 @@ interface Props {
   onClose: () => void;
   defaultPaket?: string;
 }
-
-const PAKET_OPTIONS = {
-  HOME: [
-    { v: "HOME 11 MBPS - Rp 155.000", l: "11 MBPS - Rp 155.000" },
-    { v: "HOME 16 MBPS - Rp 175.000", l: "16 MBPS - Rp 175.000" },
-    { v: "HOME 21 MBPS - Rp 195.000", l: "21 MBPS - Rp 195.000" },
-    { v: "HOME 31 MBPS - Rp 215.000", l: "31 MBPS - Rp 215.000" },
-  ],
-  GAMERS: [
-    { v: "GAMERS 40 MBPS - Rp 285.000", l: "40 MBPS - Rp 285.000" },
-    { v: "GAMERS 50 MBPS - Rp 320.000", l: "50 MBPS - Rp 320.000" },
-    { v: "GAMERS 75 MBPS - Rp 360.000", l: "75 MBPS - Rp 360.000" },
-    { v: "GAMERS 100 MBPS - Rp 405.000", l: "100 MBPS - Rp 405.000" },
-  ],
-};
 
 const TERMS = [
   "Pelanggan wajib menyediakan listrik dan tempat untuk pemasangan perangkat.",
@@ -35,17 +21,44 @@ const TERMS = [
 ];
 
 export default function CalonModal({ open, onClose, defaultPaket }: Props) {
-  const { addCalon } = useApp();
+  const { addCalon, paketList, currentUser, customerUsers } = useApp();
+
+  const loggedUser = customerUsers.find(
+    (u) => u.username === currentUser?.id || u.name === currentUser?.name || u.idPelanggan === currentUser?.id
+  );
+
   const [form, setForm] = useState({
-    nik: "", nama: "", alamat: "", hp: "", email: "",
+    nik: "",
+    nama: currentUser?.name || loggedUser?.name || "",
+    alamat: loggedUser?.alamat || "",
+    hp: loggedUser?.hp || "",
+    email: loggedUser?.email || "",
     paket: defaultPaket || "",
-    sumber: "", sumberDetail: "",
-    ktp: "", rumah: "",
+    sumber: "",
+    sumberDetail: "",
+    ktp: "",
+    rumah: "",
     setuju: false,
   });
 
+  useEffect(() => {
+    if (open) {
+      setForm((prev) => ({
+        ...prev,
+        nama: prev.nama || currentUser?.name || loggedUser?.name || "",
+        alamat: prev.alamat || loggedUser?.alamat || "",
+        hp: prev.hp || loggedUser?.hp || "",
+        email: prev.email || loggedUser?.email || "",
+        paket: defaultPaket || prev.paket,
+      }));
+    }
+  }, [open, defaultPaket, currentUser, loggedUser]);
+
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((p) => ({ ...p, [k]: v }));
+
+  // ── Draft: simpan & pulihkan form jika modal ditutup tidak sengaja ──
+  const { clearDraft } = useFormDraft("draft_calon", form, setForm, open);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +71,7 @@ export default function CalonModal({ open, onClose, defaultPaket }: Props) {
       alamat: form.alamat, paket: form.paket, sumber,
       ktp: form.ktp, rumah: form.rumah,
     });
+    clearDraft();
     setForm({
       nik: "", nama: "", alamat: "", hp: "", email: "",
       paket: "", sumber: "", sumberDetail: "", ktp: "", rumah: "", setuju: false,
@@ -105,12 +119,21 @@ export default function CalonModal({ open, onClose, defaultPaket }: Props) {
             <select className="form-control" required value={form.paket}
               onChange={(e) => set("paket", e.target.value)}>
               <option value="">-- Pilih Paket --</option>
-              <optgroup label="Layanan Internet - HOME">
-                {PAKET_OPTIONS.HOME.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-              </optgroup>
-              <optgroup label="Layanan Internet - GAMERS">
-                {PAKET_OPTIONS.GAMERS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-              </optgroup>
+              {Object.entries(
+                paketList.reduce((acc, p) => {
+                  if (!acc[p.kat]) acc[p.kat] = [];
+                  acc[p.kat].push(p);
+                  return acc;
+                }, {} as Record<string, typeof paketList>)
+              ).map(([kat, pkts]) => (
+                <optgroup key={kat} label={`Layanan Internet - ${kat.toUpperCase()}`}>
+                  {pkts.map((p) => (
+                    <option key={p.id} value={`${p.nama} - Rp ${p.harga.toLocaleString("id-ID")}`}>
+                      {p.nama} - Rp {p.harga.toLocaleString("id-ID")}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div className="form-group">
