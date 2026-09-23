@@ -21,6 +21,7 @@ from routes.galeri import galeri_bp
 from routes.verifikasi import verifikasi_bp
 from routes.customer_auth import customer_auth_bp
 from routes.odp import odp_bp
+from routes.notification import notification_bp
 
 app.register_blueprint(paket_bp, url_prefix="/api/paket")
 app.register_blueprint(tickets_bp, url_prefix="/api/tickets")
@@ -34,6 +35,7 @@ app.register_blueprint(galeri_bp, url_prefix="/api/galeri")
 app.register_blueprint(verifikasi_bp, url_prefix="/api/verifikasi")
 app.register_blueprint(customer_auth_bp, url_prefix="/api/user")
 app.register_blueprint(odp_bp, url_prefix="/api/odp")
+app.register_blueprint(notification_bp, url_prefix="/api/notifications")
 
 @app.route("/")
 def index():

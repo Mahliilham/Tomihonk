@@ -73,7 +73,7 @@ interface AppContextValue {
   // notif
   notifications: Record<NotifTarget, Notif[]>;
   pushNotif: (target: NotifTarget, title: string, desc: string) => void;
-  markRead: (target: NotifTarget, id: number) => void;
+  markRead: (target: NotifTarget, id: string) => void;
   markAllRead: (target: NotifTarget) => void;
   // konversi calon → tiket
   konversiCalonToTicket: (calonId: number | string) => Promise<string | null>;
@@ -251,21 +251,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sales: [],
   });
 
-  const seqRef = useMemoSeq();
-
-  const pushNotif = useCallback((target: NotifTarget, title: string, desc: string) => {
-    setNotifications((prev) => ({
-      ...prev,
-      [target]: [{ id: seqRef.next(), title, desc, time: Date.now(), read: false }, ...prev[target]],
-    }));
-  }, [seqRef]);
-
-  const markRead = useCallback((target: NotifTarget, id: number) => {
-    setNotifications((prev) => ({ ...prev, [target]: prev[target].map((n) => (n.id === id ? { ...n, read: true } : n)) }));
+  // ── Fetch notifikasi dari backend untuk satu target ──
+  const fetchNotifications = useCallback(async (target: NotifTarget) => {
+    try {
+      const res = await fetch(`/api/notifications?target=${target}`);
+      if (!res.ok) return;
+      const data: Notif[] = await res.json();
+      setNotifications((prev) => ({ ...prev, [target]: data }));
+    } catch {
+      // silent — tidak ganggu UX jika gagal
+    }
   }, []);
 
-  const markAllRead = useCallback((target: NotifTarget) => {
-    setNotifications((prev) => ({ ...prev, [target]: prev[target].map((n) => ({ ...n, read: true })) }));
+  // ── Fetch semua target saat pertama load ──
+  useEffect(() => {
+    fetchNotifications("admin");
+    fetchNotifications("tech");
+    fetchNotifications("sales");
+  }, [fetchNotifications]);
+
+  // ── Polling setiap 30 detik agar notif selalu up-to-date ──
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotifications("admin");
+      fetchNotifications("tech");
+      fetchNotifications("sales");
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const pushNotif = useCallback(async (target: NotifTarget, title: string, desc: string) => {
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target, title, desc }),
+      });
+      if (!res.ok) return;
+      const result = await res.json();
+      const newNotif: Notif = result.data;
+      setNotifications((prev) => ({
+        ...prev,
+        [target]: [newNotif, ...prev[target]],
+      }));
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const markRead = useCallback(async (target: NotifTarget, id: string) => {
+    // Optimistic update
+    setNotifications((prev) => ({
+      ...prev,
+      [target]: prev[target].map((n) => (n.id === id ? { ...n, read: true } : n)),
+    }));
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: "PUT" });
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const markAllRead = useCallback(async (target: NotifTarget) => {
+    // Optimistic update
+    setNotifications((prev) => ({
+      ...prev,
+      [target]: prev[target].map((n) => ({ ...n, read: true })),
+    }));
+    try {
+      await fetch(`/api/notifications/read-all?target=${target}`, { method: "PUT" });
+    } catch {
+      // silent
+    }
   }, []);
 
   const login = useCallback(async (u: string, p: string, role: Role): Promise<boolean> => {
@@ -510,7 +567,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const keluhanSeqRef = useMemoSeq(3);
   const addKeluhan: AppContextValue["addKeluhan"] = useCallback(async (k) => {
     try {
       const res = await fetch("/api/keluhan", {
@@ -527,7 +583,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       toast.error("Gagal", { description: err.message });
     }
-  }, [pushNotif, keluhanSeqRef]);
+  }, [pushNotif]);
 
   const cycleKeluhan = useCallback(async (id: number | string) => {
     try {
@@ -544,7 +600,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const lapSeqRef = useMemoSeq(2);
   const addLaporan: AppContextValue["addLaporan"] = useCallback(async (l) => {
     try {
       const res = await fetch("/api/laporan", {
@@ -570,7 +625,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast.error("Gagal", { description: err.message });
       return undefined;
     }
-  }, [pushNotif, lapSeqRef]);
+  }, [pushNotif]);
 
   const deleteLaporan = useCallback(async (id: number | string) => {
     if (!(await confirmDelete("Hapus laporan ini dari database?"))) return;

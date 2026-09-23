@@ -186,7 +186,7 @@ export type SalesVisit = {
 export type NotifTarget = "admin" | "tech" | "sales";
 
 export type Notif = {
-  id: number;
+  id: string;
   title: string;
   desc: string;
   time: number;
